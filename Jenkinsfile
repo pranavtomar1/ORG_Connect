@@ -4,16 +4,14 @@ pipeline {
     environment {
         // Docker Configuration
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_IMAGE = credentials('docker-image-name')  // Configure in Jenkins: 'pranavtomar1/orgconnect'
+        DOCKER_IMAGE = 'pranavtomar1/orgconnect'  // Hardcoded since credential was causing issues
         IMAGE_TAG = "${BUILD_NUMBER}"
         
-        // Kubernetes Configuration
-        KUBECONFIG = credentials('kubeconfig')
+        // Kubernetes Configuration - Jenkins user already has kubectl configured
         NAMESPACE = 'orgconnect'
-        
-        // Application Configuration
         APP_NAME = 'orgconnect'
-        HEALTH_CHECK_URL = 'http://localhost:30080/health'
+        
+        // Health Check Configuration
         HEALTH_CHECK_RETRIES = 5
         HEALTH_CHECK_DELAY = 10
     }
@@ -46,7 +44,7 @@ pipeline {
                                                       usernameVariable: 'DOCKER_USER', 
                                                       passwordVariable: 'DOCKER_PASS')]) {
                         sh """
-                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin ${DOCKER_REGISTRY}
+                            echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin ${DOCKER_REGISTRY}
                             docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -81,14 +79,11 @@ pipeline {
                 script {
                     echo "Deploying to ${env.TARGET_ENV} environment..."
                     
-                    // Prepare deployment manifest with actual image tag
+                    // Deploy using sed to replace image placeholder
                     sh """
-                        sed 's|\${DOCKER_IMAGE}:|\${IMAGE_TAG}|${DOCKER_IMAGE}:${IMAGE_TAG}|g' \
-                        k8s/deployment-${env.TARGET_ENV}.yaml > /tmp/deployment-${env.TARGET_ENV}.yaml
+                        sed "s|\\\${DOCKER_IMAGE}:\\\${IMAGE_TAG}|${DOCKER_IMAGE}:${IMAGE_TAG}|g" \
+                        k8s/deployment-${env.TARGET_ENV}.yaml | kubectl apply -f -
                         
-                        kubectl apply -f k8s/namespace.yaml
-                        kubectl apply -f k8s/configmap.yaml
-                        kubectl apply -f /tmp/deployment-${env.TARGET_ENV}.yaml
                         kubectl apply -f k8s/service-${env.TARGET_ENV}.yaml
                     """
                     
@@ -117,7 +112,7 @@ pipeline {
                                 script: """
                                     kubectl get pods -n ${NAMESPACE} \
                                     -l app=${APP_NAME},version=${env.TARGET_ENV} \
-                                    -o jsonpath='{.items[*].status.phase}' | grep -c 'Running' || true
+                                    -o jsonpath='{.items[*].status.phase}' | grep -c 'Running' || echo '0'
                                 """,
                                 returnStdout: true
                             ).trim()
@@ -147,21 +142,6 @@ pipeline {
                     
                     if (!healthCheckPassed) {
                         error("Health check failed after ${env.HEALTH_CHECK_RETRIES} attempts. Aborting deployment.")
-                    }
-                }
-            }
-        }
-        
-        stage('Approval') {
-            steps {
-                script {
-                    echo "Deployment to ${env.TARGET_ENV} successful. Ready to switch traffic."
-                    
-                    // For automated deployment, you can remove this manual approval
-                    // For demonstration/college purposes, manual approval is good practice
-                    timeout(time: 10, unit: 'MINUTES') {
-                        input message: "Switch traffic from ${env.CURRENT_ACTIVE} to ${env.TARGET_ENV}?",
-                              ok: 'Deploy to Production'
                     }
                 }
             }
@@ -207,12 +187,11 @@ pipeline {
                     echo "Performing post-deployment verification..."
                     
                     // Monitor for a short period
-                    sleep(30)
+                    sleep(10)
                     
                     // Check if new environment is stable
                     sh """
                         kubectl get pods -n ${NAMESPACE} -l app=${APP_NAME},version=${env.TARGET_ENV}
-                        kubectl top pods -n ${NAMESPACE} -l app=${APP_NAME},version=${env.TARGET_ENV} || true
                     """
                     
                     echo "Post-deployment verification completed successfully!"
@@ -225,17 +204,11 @@ pipeline {
                 script {
                     echo "Scaling down old ${env.CURRENT_ACTIVE} environment..."
                     
-                    // Option 1: Scale down to 0 (keeps deployment for quick rollback)
+                    // Scale down to 0 (keeps deployment for quick rollback)
                     sh """
                         kubectl scale deployment/${APP_NAME}-${env.CURRENT_ACTIVE} \
                         -n ${NAMESPACE} --replicas=0
                     """
-                    
-                    // Option 2: Delete old deployment (uncomment if preferred)
-                    // sh """
-                    //     kubectl delete deployment/${APP_NAME}-${env.CURRENT_ACTIVE} \
-                    //     -n ${NAMESPACE} || true
-                    // """
                     
                     echo "Old environment scaled down. Deployment complete!"
                 }
@@ -292,9 +265,8 @@ pipeline {
             echo "Cleaning up..."
             sh """
                 docker system prune -f || true
-                kubectl delete pod health-check-pod-${BUILD_NUMBER} -n ${NAMESPACE} || true
+                kubectl delete pod health-check-pod-${BUILD_NUMBER} -n ${NAMESPACE} 2>/dev/null || true
             """
         }
     }
 }
-
