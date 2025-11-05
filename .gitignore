@@ -1,25 +1,69 @@
-# Logs
-logs
-*.log
+# Dependencies
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Build outputs
+dist/
+build/
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+*.log
+
+# Kubernetes secrets (never commit these!)
+*.kubeconfig
+kubeconfig
+admin.conf
+*.pem
+*.key
+*.crt
+
+# AWS credentials (never commit these!)
+*.pem
+*.ppk
+aws-credentials.txt
+
+# Jenkins credentials
+jenkins-credentials.txt
+
+# Docker
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Plan files (auto-generated)
+*.plan.md
+
+# Local testing
+test-results/
+playwright-report/

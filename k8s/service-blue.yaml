@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: orgconnect-blue
+  namespace: orgconnect
+  labels:
+    app: orgconnect
+    version: blue
+spec:
+  type: ClusterIP
+  selector:
+    app: orgconnect
+    version: blue
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    name: http
+  sessionAffinity: ClientIP
+
